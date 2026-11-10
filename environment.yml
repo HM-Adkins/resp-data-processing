@@ -1,0 +1,13 @@
+name: resp-preprocessing
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - r-base=4.4
+  - r-tidyverse
+  - r-dplyr>=1.1
+  - r-lattice
+  - r-writexl
+  - r-testthat
+  - r-lintr
+  - r-styler
