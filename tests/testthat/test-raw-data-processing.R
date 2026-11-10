@@ -1,10 +1,10 @@
 raw_script_candidates <- c(
-  "Raw_Resp_Preprocessing.r",
-  file.path("..", "Raw_Resp_Preprocessing.r"),
-  file.path("..", "..", "Raw_Resp_Preprocessing.r")
+  "Raw_Resp_Data_Processing.R",
+  file.path("..", "Raw_Resp_Data_Processing.R"),
+  file.path("..", "..", "Raw_Resp_Data_Processing.R")
 )
 raw_script <- raw_script_candidates[file.exists(raw_script_candidates)][1]
-if (is.na(raw_script)) stop("Could not locate Raw_Resp_Preprocessing.r.")
+if (is.na(raw_script)) stop("Could not locate Raw_Resp_Data_Processing.R.")
 source(raw_script, local = TRUE)
 
 testthat::test_that("raw chamber selection keeps only requested channels", {
