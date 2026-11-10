@@ -1,0 +1,8 @@
+# Input data and generated outputs
+data/
+input/
+output/
+
+# R session files
+.Rhistory
+.RData
