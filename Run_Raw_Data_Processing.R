@@ -5,7 +5,7 @@ stages <- c("raw", "control", "correction")  # any subset, runs in this order
 
 settings <- list(
   file_path = "data/T.macrodon_FMR_18C_raw.csv",
-  summary_file = "data/saw_FMR_TM_Data_summary.csv",
+  summary_file = "data/FMR_TM_Data_summary.csv",
   experiment = 18,
   experiment_start_time = "2023-07-26 09:00:00",
   experiment_end_time = "2023-07-26 16:30:00",
