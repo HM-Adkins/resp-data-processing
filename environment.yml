@@ -1,4 +1,4 @@
-name: resp-preprocessing
+name: resp-processing-env
 channels:
   - conda-forge
   - nodefaults
