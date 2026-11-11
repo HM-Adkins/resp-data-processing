@@ -181,7 +181,7 @@ match_chamber_columns <- function(
 
   column_chambers <- str_match(
     column_names,
-    regex("CH\\s*(\\d+)", ignore_case = TRUE)
+    regex("CH[.\\s]*(\\d+)", ignore_case = TRUE)
   )[, 2]
   if (anyNA(column_chambers)) {
     stop("Could not identify chamber numbers in ", field, " column names.")
