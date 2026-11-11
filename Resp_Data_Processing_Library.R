@@ -98,7 +98,7 @@ get_column_info <- function(data) {
     www_g = "wet.*weight(?!.*tissue)|www",
     resp_vol_ml = "resp.*vol",
     chamber_notes = "chamber.*note|note",
-    wtw_g = "wet.*tissue|wtw",
+    tww_g = "wet.*tissue|tww",
     ch_vol_ml = "chamber.*vol(?!.*resp)",
 
     # Time columns
@@ -116,7 +116,7 @@ get_column_info <- function(data) {
   # not one column per chamber). Includes descriptive columns (one value per
   # individual) and time columns (shared across all individuals).
   scalar_cols <- c(
-    "chamber", "www_g", "resp_vol_ml", "chamber_notes", "wtw_g", "ch_vol_ml",
+    "chamber", "www_g", "resp_vol_ml", "chamber_notes", "tww_g", "ch_vol_ml",
     "datetime", "time_sec"
   )
 

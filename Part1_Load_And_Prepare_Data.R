@@ -29,7 +29,7 @@ extract_descriptive_data <- function(
   chamber_notes_col <- col_info$names$chamber_notes
   descriptive_cols <- unlist(
     col_info$names[c("chamber", "www_g", "resp_vol_ml", "chamber_notes",
-                     "wtw_g", "ch_vol_ml")],
+                     "tww_g", "ch_vol_ml")],
     use.names = FALSE
   )
   desc <- raw_data %>%
@@ -41,7 +41,7 @@ extract_descriptive_data <- function(
     "www_g" = col_info$names$www_g,
     "resp_vol_ml" = col_info$names$resp_vol_ml,
     "chamber_notes" = col_info$names$chamber_notes,
-    "wtw_g" = col_info$names$wtw_g,
+    "tww_g" = col_info$names$tww_g,
     "ch_vol_ml" = col_info$names$ch_vol_ml
   )
 
@@ -69,7 +69,7 @@ extract_descriptive_data <- function(
     stop("Descriptive data must contain exactly one row per chamber.")
   }
 
-  numeric_fields <- c("www_g", "wtw_g", "resp_vol_ml", "ch_vol_ml")
+  numeric_fields <- c("www_g", "tww_g", "resp_vol_ml", "ch_vol_ml")
   for (field in numeric_fields) {
     values <- as.character(desc[[field]])
     values[trimws(values) == ""] <- NA_character_
@@ -90,11 +90,11 @@ extract_descriptive_data <- function(
       species = .env$species,
       id = .env$id,
       www_g = www_g,
-      wtw_g = wtw_g,
+      tww_g = tww_g,
       resp_vol_ml = resp_vol_ml,
       ch_vol_ml = ch_vol_ml,
       www_kg = www_g / 1000,
-      wtw_kg = wtw_g / 1000
+      tww_kg = tww_g / 1000
     )
 
   if (verbose) {
@@ -356,7 +356,7 @@ process_part1_data_loading <- function(
 
   # Validate required columns are present (descriptive + measurement)
   validate_columns(col_info, c(
-    "chamber", "www_g", "resp_vol_ml", "chamber_notes", "wtw_g", "ch_vol_ml",
+    "chamber", "www_g", "resp_vol_ml", "chamber_notes", "tww_g", "ch_vol_ml",
     "datetime", "time_sec", "mo2", "r2"
   ))
 

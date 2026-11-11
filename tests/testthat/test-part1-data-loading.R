@@ -18,7 +18,7 @@ part1_col_info <- list(
     www_g = "Wet weight",
     resp_vol_ml = "Resp volume",
     chamber_notes = "Chamber notes",
-    wtw_g = "Tissue weight",
+    tww_g = "Tissue weight",
     ch_vol_ml = "Chamber volume",
     datetime = "DateTime",
     time_sec = "Time sec",
