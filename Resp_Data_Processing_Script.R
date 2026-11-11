@@ -17,7 +17,9 @@ source("Resp_Data_Processing_Library.R")
 
 FMR_18C_TM_results <- process_respiration_data(
   file_path = "T.macrodon_FMR_18C.csv",
-  experiment_start_time = "2023-07-26 9:00:00 CDT",
+  experiment_start_time = "2023-07-26 9:00:00",
+  experiment = 18,
+  tz = "America/Chicago",
   export_path = "output/FMR_18C_TM",
   plot_title_prefix = "T. macrodon 18°C",
   generate_raw_data_plot = TRUE,
@@ -34,7 +36,9 @@ FMR_18C_TM_results <- process_respiration_data(
 
 FMR_22C_R1_TM_results <- process_respiration_data(
   file_path = "T.macrodon_FMR_22C_RUN1.csv",
-  experiment_start_time = "2023-06-21 9:00:00 CDT",
+  experiment_start_time = "2023-06-21 9:00:00",
+  experiment = 22,
+  tz = "America/Chicago",
   export_path = "output/FMR_22C_R1_TM",
   plot_title_prefix = "T. macrodon 22°C",
   generate_raw_data_plot = TRUE,
@@ -51,7 +55,9 @@ FMR_22C_R1_TM_results <- process_respiration_data(
 
 FMR_26C_R1_TM_results <- process_respiration_data(
   file_path = "T.macrodon_FMR_26C_RUN1.csv",
-  experiment_start_time = "2023-06-28 9:00:00 CDT",
+  experiment_start_time = "2023-06-28 9:00:00",
+  experiment = 26,
+  tz = "America/Chicago",
   export_path = "output/FMR_26C_R1_TM",
   plot_title_prefix = "T. macrodon 26°C",
   generate_raw_data_plot = TRUE,
@@ -68,7 +74,9 @@ FMR_26C_R1_TM_results <- process_respiration_data(
 
 FMR_30C_R1_TM_results <- process_respiration_data(
   file_path = "T.macrodon_FMR_30C_RUN1.csv",
-  experiment_start_time = "2023-07-12 9:00:00 CDT",
+  experiment_start_time = "2023-07-12 9:00:00",
+  experiment = 30,
+  tz = "America/Chicago",
   export_path = "output/FMR_30C_R1_TM",
   plot_title_prefix = "T. macrodon 30°C",
   generate_raw_data_plot = TRUE,
@@ -85,7 +93,9 @@ FMR_30C_R1_TM_results <- process_respiration_data(
 
 FMR_34C_TM_results <- process_respiration_data(
   file_path = "T.macrodon_FMR_34C.csv",
-  experiment_start_time = "2023-07-19 9:00:00 CDT",
+  experiment_start_time = "2023-07-19 9:00:00",
+  experiment = 34,
+  tz = "America/Chicago",
   export_path = "output/FMR_34C_TM",
   plot_title_prefix = "T. macrodon 34°C",
   generate_raw_data_plot = TRUE,
@@ -124,8 +134,3 @@ unique(All_Data_summary$species)
 library(writexl)
 write_xlsx(All_Data, "FMR_TM_Data_final.xlsx")
 write_xlsx(All_Data_summary, "FMR_TM_Data_summary.xlsx")
-
-#------------------------------------------------------------------------------
-# End of Script
-#------------------------------------------------------------------------------
-
