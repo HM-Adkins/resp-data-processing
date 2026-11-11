@@ -2,7 +2,7 @@
 
 #------------------------------------------------------------------------------
 # PART 1: DATA LOADING AND PREPROCESSING
-# extract_descriptive_data, prepare_time_series, match_chamber_columns, 
+# extract_descriptive_data, prepare_time_series, match_chamber_columns,
 # build_chamber_list, plot_raw_data, process_part1_data_loading
 #------------------------------------------------------------------------------
 
@@ -347,7 +347,9 @@ process_part1_data_loading <- function(
   # Load
   if (verbose) cat("[1. 1] Loading data...\n")
   raw_data <- read.csv(file_path, stringsAsFactors = FALSE)
-  if (verbose) cat("      ", nrow(raw_data), "rows ×", ncol(raw_data), "columns\n\n")
+  if (verbose) cat(
+    "      ", nrow(raw_data), "rows x", ncol(raw_data), "columns\n\n"
+  )
 
   # Get column info
   col_info <- get_column_info(raw_data)
