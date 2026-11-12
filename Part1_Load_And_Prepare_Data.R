@@ -333,7 +333,7 @@ plot_raw_data <- function(
     col_info,
     title_prefix = NULL,
     output_file = NULL) {
-  cfg <- RESPIRATION_CONFIG
+  cfg <- resp_config
   mo2_cols <- match_chamber_columns(
     col_info$names$mo2, "MO2", desc_data$chamber
   )

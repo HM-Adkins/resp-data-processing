@@ -5,12 +5,12 @@
 
 # 2A.1 Analyze control chamber(s)
 analyze_control_chamber <- function(chamber_list, desc_data, r2_threshold, 
-                                    min_good = RESPIRATION_CONFIG$thresholds$min_good_control_points) {
+                                    min_good = resp_config$thresholds$min_good_control_points) {
   
   ctrl_idx <- which(desc_data$id == "Control")
   if (length(ctrl_idx) == 0) stop("No control chamber found")
   
-  cfg <- RESPIRATION_CONFIG
+  cfg <- resp_config
   
   # Process each control
   ctrl_results <- lapply(ctrl_idx, function(i) {
@@ -86,7 +86,7 @@ analyze_control_chamber <- function(chamber_list, desc_data, r2_threshold,
 # 2A.2 Control plot
 plot_control_regression <- function(ctrl_analysis, title_prefix = NULL, output_file = NULL) {
   
-  cfg <- RESPIRATION_CONFIG
+  cfg <- resp_config
   
   plot_device(output_file, 10, 6, {
     n <- ctrl_analysis$n_controls
@@ -141,7 +141,7 @@ plot_control_regression <- function(ctrl_analysis, title_prefix = NULL, output_f
 # RUN PART 2A FUNCTIONS: 2A.3
 process_control_chambers <- function(
     part1_results,
-    control_r2_threshold = RESPIRATION_CONFIG$thresholds$default_control_r2,
+    control_r2_threshold = resp_config$thresholds$default_control_r2,
     generate_control_plot = FALSE,
     plot_title_prefix = NULL,
     export_path = NULL,

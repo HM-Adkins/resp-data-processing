@@ -190,7 +190,7 @@ testthat::test_that("raw plots use the same chamber mapping as the data", {
   info <- list(names = list(mo2 = c("CH2 MO2", "CH1 MO2")))
   recorded <- list()
   plot_env <- new.env(parent = environment(plot_raw_data))
-  plot_env$RESPIRATION_CONFIG <- list(
+  plot_env$resp_config <- list(
     plot = list(point_size = 1),
     colors = list(blue = "blue", red = "red")
   )

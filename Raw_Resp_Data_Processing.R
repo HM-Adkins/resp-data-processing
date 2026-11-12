@@ -106,13 +106,12 @@ prepare_raw_data <- function(
   end_idx <- max(data_end_indices)
   start_time <- as.POSIXct(experiment_start_time, tz = tz)
   end_time <- as.POSIXct(experiment_end_time, tz = tz)
-  
   if (is.na(start_time)) stop("Invalid experiment start time.")
   if (is.na(end_time)) stop("Invalid experiment end time.")
   if (start_time >= end_time) {
     stop("Experiment start time must be before end time.")
   }
-  
+
   start_idx <- col_info$idx$datetime
   data <- data[, seq.int(start_idx, end_idx), drop = FALSE] %>%
     mutate(
@@ -122,7 +121,6 @@ prepare_raw_data <- function(
         tz = tz
       )
     )
-  
   if (anyNA(data[[dt_col]])) {
     stop("Some Date & Time values could not be parsed.")
   }

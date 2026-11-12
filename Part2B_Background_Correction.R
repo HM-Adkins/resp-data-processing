@@ -7,7 +7,7 @@
 correct_background <- function(chamber_list, ctrl_analysis, desc_data) {
   
   bg_mo2 <- ctrl_analysis$data$mean_control_corrected_mo2_ch
-  bg_threshold <- RESPIRATION_CONFIG$thresholds$high_background_pct
+  bg_threshold <- resp_config$thresholds$high_background_pct
   
   lapply(seq_along(chamber_list), function(i) {
     chamber_list[[i]] %>%
@@ -27,7 +27,7 @@ correct_background <- function(chamber_list, ctrl_analysis, desc_data) {
 # 2B.2 Background correction comparison plot
 plot_background_correction <- function(corrected_chambers, ctrl_analysis, desc_data, title_prefix = NULL, output_file = NULL) {
   
-  cfg <- RESPIRATION_CONFIG
+  cfg <- resp_config
   
   plot_device(output_file, 12, 10, {
     exp_idx <- which(desc_data$id != "Control")
