@@ -4,7 +4,7 @@
 # PART 1: DATA LOADING AND PROCESSING
 # get_column_info, validate_columns, match_chamber_columns,
 # extract_descriptive_data, prepare_time_series, build_chamber_list,
-# plot_raw_data, process_part1_data_loading
+# plot_raw_data, plot_raw_control_data, process_part1_data_loading
 
 
 # Get named column indices from the data
@@ -380,6 +380,75 @@ plot_raw_data <- function(
 }
 
 
+# Plot raw control MO2 separately because it is not mass-specific.
+plot_raw_control_data <- function(
+    data,
+    desc_data,
+    col_info,
+    title_prefix = NULL,
+    output_file = NULL) {
+  control_idx <- which(desc_data$id == "Control")
+  if (length(control_idx) == 0L) {
+    stop("No control chamber found for the raw control plot.")
+  }
+  control_numbers <- desc_data$chamber[control_idx]
+  mo2_cols <- match_chamber_columns(
+    col_info$names$mo2, "MO2", control_numbers
+  )
+  if (!is.numeric(data$time_hour) || !any(is.finite(data$time_hour))) {
+    stop("Cannot plot controls without finite time values.")
+  }
+  values <- lapply(mo2_cols, function(name) {
+    mo2 <- data[[name]]
+    if (!is.numeric(mo2) ||
+        !any(is.finite(mo2) & is.finite(data$time_hour))) {
+      stop("Cannot plot control column ", name, ": no finite time and MO2 pairs.")
+    }
+    mo2
+  })
+  finite_values <- unlist(lapply(values, function(mo2) {
+    mo2[is.finite(mo2) & is.finite(data$time_hour)]
+  }), use.names = FALSE)
+  limits <- range(c(0, finite_values[is.finite(finite_values)]))
+  if (limits[1] == limits[2]) {
+    limits <- limits + c(-1, 1)
+  }
+  cfg <- resp_config
+
+  plot_device(output_file, 10, 8, {
+    n <- length(control_idx)
+    nr <- ceiling(sqrt(n))
+    nc <- ceiling(n / nr)
+    par(mfrow = c(nr, nc), mar = c(4, 4, 3, 1), oma = c(1, 1, 3, 0))
+    time_zero <- min(data$time_hour[is.finite(data$time_hour)])
+
+    for (i in seq_along(control_idx)) {
+      plot(
+        data$time_hour, values[[i]],
+        main = paste("Control - Chamber", control_numbers[i]),
+        xlab = if (i > (nr - 1) * nc) "Time (hrs)" else "",
+        ylab = "MO2 (mg O2/chamber/hr)",
+        ylim = limits,
+        pch = 16, cex = cfg$plot$point_size
+      )
+      usr <- par("usr")
+      polygon(c(time_zero, 0, 0, time_zero),
+        c(usr[3], usr[3], usr[4], usr[4]),
+        col = rgb(0.4, 0.4, 0.4, 0.2), border = NA
+      )
+      abline(v = 0, col = cfg$colors$blue, lty = 2)
+      abline(h = 0, col = cfg$colors$red, lty = 2)
+    }
+    if (!is.null(title_prefix)) {
+      mtext(paste(title_prefix, "- Raw Controls"), outer = TRUE,
+            font = 2, cex = 1.2)
+    }
+  })
+
+  if (!is.null(output_file)) message("Raw control plot: ", output_file)
+}
+
+
 # 1.5 RUN PART 1 FUNCTIONS AND PLOT RAW DATA
 process_part1_data_loading <- function(
     file_path,
@@ -438,6 +507,14 @@ process_part1_data_loading <- function(
       time_series$all, desc_data, col_info_all, plot_title_prefix,
       paste0(export_path, "_raw_data_plots.pdf")
     )
+    if (any(desc_data$id == "Control")) {
+      plot_raw_control_data(
+        time_series$all, desc_data, col_info_all, plot_title_prefix,
+        paste0(export_path, "_raw_control_plots.pdf")
+      )
+    } else if (verbose) {
+      message("No control chambers found; skipping raw control plot.")
+    }
   }
 
   if (verbose) cat("✓ Part 1 Complete\n")
