@@ -402,7 +402,13 @@ process_part1_data_loading <- function(
     descriptive_data = desc_data,
     time_series = time_series,
     chamber_list = chamber_list,
-    col_info = col_info_resp,
+    col_info = lapply(col_info_resp, function(fields) {
+      fields[setdiff(
+        names(fields),
+        c("chamber", "www_g", "resp_vol_ml",
+          "chamber_notes", "tww_g", "ch_vol_ml")
+      )]
+    }),
     metadata = list(
       species = unique(desc_data$species[desc_data$id != "Control"]),
       file_path = file_path,
