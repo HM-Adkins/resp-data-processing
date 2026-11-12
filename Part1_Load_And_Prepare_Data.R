@@ -2,8 +2,8 @@
 
 
 # PART 1: DATA LOADING AND PROCESSING
-# get_column_info, validate_columns, extract_descriptive_data,
-# prepare_time_series, match_chamber_columns, build_chamber_list,
+# get_column_info, validate_columns, match_chamber_columns,
+# extract_descriptive_data, prepare_time_series, build_chamber_list,
 # plot_raw_data, process_part1_data_loading
 
 
@@ -62,6 +62,44 @@ validate_columns <- function(col_info, required) {
   if (length(missing) > 0) {
     stop("Missing required columns: ", paste(missing, collapse = ", "))
   }
+}
+
+
+# Match chamber-specific columns in the data
+match_chamber_columns <- function(
+    column_names,
+    field,
+    chamber_numbers,
+    required_chambers = chamber_numbers) {
+  column_names <- column_names[!is.na(column_names)]
+  if (length(column_names) == 0L) {
+    stop("No ", field, " columns are available.")
+  }
+
+  column_chambers <- str_match(
+    column_names,
+    regex("CH[.\\s]*(\\d+)", ignore_case = TRUE)
+  )[, 2]
+  if (anyNA(column_chambers)) {
+    stop("Could not identify chamber numbers in ", field, " column names.")
+  }
+
+  column_chambers <- as.integer(column_chambers)
+  if (anyDuplicated(column_chambers)) {
+    stop("More than one ", field, " column was found for a chamber.")
+  }
+
+  missing <- setdiff(required_chambers, column_chambers)
+  if (length(missing) > 0L) {
+    stop("Missing ", field, " column(s) for chamber(s): ",
+         paste(missing, collapse = ", "))
+  }
+
+  matched <- match(chamber_numbers, column_chambers)
+  result <- rep(NA_character_, length(chamber_numbers))
+  available <- !is.na(matched)
+  result[available] <- column_names[matched[available]]
+  result
 }
 
 
@@ -169,7 +207,7 @@ extract_descriptive_data <- function(
 }
 
 
-# 1.2 Prepare time series data
+# 1.2 Prepare time series
 prepare_time_series <- function(
     data,
     col_info,
@@ -227,45 +265,7 @@ prepare_time_series <- function(
 }
 
 
-# 1.3 Match chamber-specific columns in the data
-match_chamber_columns <- function(
-    column_names,
-    field,
-    chamber_numbers,
-    required_chambers = chamber_numbers) {
-  column_names <- column_names[!is.na(column_names)]
-  if (length(column_names) == 0L) {
-    stop("No ", field, " columns are available.")
-  }
-
-  column_chambers <- str_match(
-    column_names,
-    regex("CH[.\\s]*(\\d+)", ignore_case = TRUE)
-  )[, 2]
-  if (anyNA(column_chambers)) {
-    stop("Could not identify chamber numbers in ", field, " column names.")
-  }
-
-  column_chambers <- as.integer(column_chambers)
-  if (anyDuplicated(column_chambers)) {
-    stop("More than one ", field, " column was found for a chamber.")
-  }
-
-  missing <- setdiff(required_chambers, column_chambers)
-  if (length(missing) > 0L) {
-    stop("Missing ", field, " column(s) for chamber(s): ",
-         paste(missing, collapse = ", "))
-  }
-
-  matched <- match(chamber_numbers, column_chambers)
-  result <- rep(NA_character_, length(chamber_numbers))
-  available <- !is.na(matched)
-  result[available] <- column_names[matched[available]]
-  result
-}
-
-
-# 1.4 Build list of chamber-specific data sets
+# 1.3 Build list of chamber-specific data sets
 build_chamber_list <- function(resp_data, desc_data, col_info) {
   n_chambers <- nrow(desc_data)
   time_vec <- resp_data$time_hour
@@ -326,7 +326,7 @@ build_chamber_list <- function(resp_data, desc_data, col_info) {
 }
 
 
-# 1.5 Raw MO2 data plot
+# 1.4 Raw MO2 data plot
 plot_raw_data <- function(
     data,
     desc_data,
@@ -403,7 +403,7 @@ process_part1_data_loading <- function(
 
   if (verbose) cat("\n=== PART 1: DATA LOADING & PREPROCESSING ===\n\n")
 
-  if (verbose) cat("[1. 1] Loading data...\n")
+  if (verbose) cat("Loading data...\n")
   raw_data <- read.csv(file_path, stringsAsFactors = FALSE)
   if (verbose) cat(
     "      ", nrow(raw_data), "rows x", ncol(raw_data), "columns\n\n"
@@ -415,12 +415,12 @@ process_part1_data_loading <- function(
     "datetime", "time_sec", "mo2", "r2"
   ))
 
-  if (verbose) cat("[1.2] Extracting metadata...\n")
+  if (verbose) cat("[1.1] Extracting metadata...\n")
   desc_data <- extract_descriptive_data(
     raw_data, col_info, experiment, id_delimiter, verbose
   )
 
-  if (verbose) cat("[1.3] Processing time series...\n")
+  if (verbose) cat("[1.2] Processing time series...\n")
   resp_data <- raw_data %>%
     select(all_of(names(raw_data)[col_info$idx$datetime:ncol(raw_data)]))
 
@@ -431,7 +431,7 @@ process_part1_data_loading <- function(
   if (verbose) cat("      Acclimation:", nrow(time_series$acclimation),
                    "| Experimental:", nrow(time_series$experimental), "\n\n")
 
-  if (verbose) cat("[1.4] Building list of chamber datasets...\n")
+  if (verbose) cat("[1.3] Building list of chamber datasets...\n")
   # Update col_info_resp to include the newly created time_hour column
   col_info_resp <- get_column_info(time_series$experimental)
   chamber_list <- build_chamber_list(time_series$experimental, desc_data,
@@ -439,7 +439,7 @@ process_part1_data_loading <- function(
   if (verbose) cat("      ", length(chamber_list), "chambers ready\n\n")
 
   if (generate_raw_data_plot && !is.null(export_path)) {
-    if (verbose) cat("[1.5] Plotting raw data...\n")
+    if (verbose) cat("[1.4] Plotting raw data...\n")
     col_info_all <- get_column_info(time_series$all)
     plot_raw_data(
       time_series$all, desc_data, col_info_all, plot_title_prefix,
