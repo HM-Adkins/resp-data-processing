@@ -47,12 +47,37 @@ testthat::test_that("metadata uses the explicit experiment and checks chamber no
   testthat::expect_equal(desc$species, c("Fish", "Control"))
   testthat::expect_equal(desc$id, c("A1", "Control"))
   testthat::expect_equal(desc$www_kg[1], 0.1)
+  testthat::expect_equal(desc$tww_g[1], 80)
+  testthat::expect_equal(desc$tww_kg[1], 0.08)
 
   raw$`Chamber notes`[1] <- "missing delimiter"
   testthat::expect_error(
     extract_descriptive_data(raw, part1_col_info, 123, verbose = FALSE),
     "Could not parse species and ID"
   )
+})
+
+testthat::test_that("tissue wet weight is identified using the tww abbreviation", {
+  input <- data.frame(
+    Chamber = 1,
+    www_g = 100,
+    `Resp volume` = 250,
+    `Chamber notes` = "Fish-A1",
+    tww_g = 80,
+    `Chamber volume` = 500,
+    check.names = FALSE
+  )
+
+  info <- get_column_info(input)
+  testthat::expect_identical(info$names$tww_g, "tww_g")
+  testthat::expect_silent(validate_columns(info, c("chamber", "tww_g")))
+  testthat::expect_error(
+    validate_columns(info, c("datetime", "slope")),
+    "Missing required columns: datetime, slope"
+  )
+  desc <- extract_descriptive_data(input, info, experiment = 1, verbose = FALSE)
+  testthat::expect_equal(desc$tww_g, 80)
+  testthat::expect_equal(desc$tww_kg, 0.08)
 })
 
 testthat::test_that("time series parsing uses the supplied time zone", {
@@ -106,14 +131,15 @@ testthat::test_that("chamber measurements are matched by chamber number", {
     `CH1 MO2` = c(10, 11),
     `CH2 R2` = c(0.9, 0.9),
     `CH1 R2` = c(0.8, 0.8),
-    `CH2 slope` = c(-0.2, -0.3),
+    `CH.2.slope..mgO2.L.hr.` = c(-0.2, -0.3),
+    `CH.1.slope..mgO2.L.hr.` = c(-1, -2),
     check.names = FALSE
   )
   info <- list(
     names = list(
       mo2 = c("CH2 MO2", "CH1 MO2"),
       r2 = c("CH2 R2", "CH1 R2"),
-      slope = "CH2 slope",
+      slope = c("CH.2.slope..mgO2.L.hr.", "CH.1.slope..mgO2.L.hr."),
       temp = character()
     )
   )
@@ -122,10 +148,15 @@ testthat::test_that("chamber measurements are matched by chamber number", {
 
   testthat::expect_equal(chambers[[1]]$raw_mo2_kg_www, c(10, 11))
   testthat::expect_equal(chambers[[1]]$r2, c(0.8, 0.8))
+  testthat::expect_equal(chambers[[1]]$slope, c(-1, -2))
   testthat::expect_equal(chambers[[2]]$slope, c(-0.2, -0.3))
   testthat::expect_identical(
     match_chamber_columns(info$names$mo2, "MO2", desc$chamber),
     c("CH1 MO2", "CH2 MO2")
+  )
+  testthat::expect_identical(
+    match_chamber_columns(c("CH.2.MO2", "CH.1.MO2"), "MO2", desc$chamber),
+    c("CH.1.MO2", "CH.2.MO2")
   )
   testthat::expect_error(
     build_chamber_list(data, desc, utils::modifyList(info, list(names = list(
@@ -135,6 +166,12 @@ testthat::test_that("chamber measurements are matched by chamber number", {
       temp = character()
     )))),
     "No slope columns"
+  )
+  missing_slope <- info
+  missing_slope$names$slope <- "CH.2.slope..mgO2.L.hr."
+  testthat::expect_error(
+    build_chamber_list(data, desc, missing_slope),
+    "Missing slope column\\(s\\) for chamber\\(s\\): 1"
   )
 })
 
