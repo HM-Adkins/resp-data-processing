@@ -23,7 +23,30 @@ prepare_regression_points <- function(measure_data, col_info, bin_size = NULL) {
     mutate(
       chamber = as.integer(str_extract(chamber, "(?i)(?<=CH)\\d+")),
       phase = toupper(trimws(as.character(.data[[phase_col]])))
+       )
+
+  losses <- points %>%
+    group_by(phase, chamber) %>%
+    summarise(
+      excluded = sum(!is.finite(o2) | !is.finite(time_sec) | !is.finite(time_hour)),
+      valid = n() - excluded,
+      .groups = "drop"
     ) %>%
+    mutate(discarded = if (is.null(bin_size)) 0 else valid %% bin_size) %>%
+    filter(excluded > 0 | discarded > 0)
+  if (nrow(losses) > 0L) {
+    details <- paste0(
+      "chamber ", losses$chamber, " phase ", losses$phase, ": ",
+      losses$excluded, " missing/non-finite O2 or time observation(s) excluded, ",
+      losses$discarded, " observation(s) discarded in incomplete final bins"
+    )
+    warning(
+      "Raw regression (", if (is.null(bin_size)) "unbinned" else
+        paste0("bin size ", bin_size), "): ",
+      paste(details, collapse = "; "), ".", call. = FALSE
+    )
+  }
+  points <- points %>%
     filter(is.finite(o2), is.finite(time_sec), is.finite(time_hour)) %>%
     arrange(chamber, phase, time_sec)
 
