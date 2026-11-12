@@ -277,16 +277,9 @@ build_chamber_list <- function(resp_data, desc_data, col_info) {
 
   mo2_cols <- match_chamber_columns(col_info$names$mo2, "MO2", chamber_numbers)
   r2_cols <- match_chamber_columns(col_info$names$r2, "R2", chamber_numbers)
-  control_idx <- which(desc_data$id == "Control")
-  slope_cols <- rep(NA_character_, n_chambers)
-  if (length(control_idx) > 0L) {
-    slope_cols <- match_chamber_columns(
-      col_info$names$slope,
-      "slope",
-      chamber_numbers,
-      required_chambers = chamber_numbers[control_idx]
-    )
-  }
+  slope_cols <- match_chamber_columns(
+  col_info$names$slope, "slope", chamber_numbers
+  )
 
   # Calculate average temperature
   temp_cols <- col_info$names$temp[!is.na(col_info$names$temp)]
@@ -306,12 +299,12 @@ build_chamber_list <- function(resp_data, desc_data, col_info) {
       time = time_vec,
       avg_temp = avg_temp,
       r2 = resp_data[[r2_cols[i]]],
+      slope = resp_data[[slope_cols[i]]],
       raw_mo2_kg_www = resp_data[[mo2_cols[i]]]
     ) %>%
       mutate(raw_mo2_ch = raw_mo2_kg_www * desc_data$www_kg[i])
 
     if (desc_data$id[i] == "Control") {
-      chamber_data$slope <- resp_data[[slope_cols[i]]]
       chamber_data <- chamber_data %>%
         mutate(
           raw_mo2_ch = raw_mo2_kg_www,
