@@ -1,7 +1,9 @@
-#------------------------------------------------------------------------------
+#!/usr/bin/env Rscript
+
+
 # Respiration Data Workup
 # Purpose:
-# Preprocess MO2 (metabolic rate) data from intermittent flow respirometry trials
+# Preprocess MO2 (metabolic rate) data from intermittent flow respirometry
 # Author:
 # HM-Adkins
 # Updates:
@@ -17,19 +19,20 @@
 #     https://www.anthropic.com/claude
 # GitHub. (2021). GitHub Copilot [AI-powered code completion tool].
 #     https://github.com/features/copilot
-#------------------------------------------------------------------------------
+
 
 library(tidyverse)
 library(lattice)
 library(writexl)
 
-#------------------------------------------------------------------------------
-# PLOT CONFIGURATION
-#------------------------------------------------------------------------------
+
+# Configuration for plots, helper functions and main workflow function
+# Helper functions:
+# create_custom_config, plot_device, setup_analysis, export_results
+# Main workflow function: process_respiration_data
 
 # Configuration object for plot themes and settings
-# Users can modify this before running analysis or create custom configs
-RESPIRATION_CONFIG <- list(
+resp_config <- list(
   colors = list(
     raw = "#D55E00",
     corrected = "#0072B2",
@@ -53,14 +56,12 @@ RESPIRATION_CONFIG <- list(
   )
 )
 
-#------------------------------------------------------------------------------
-# PLOT CONFIGURATION HELPER
-#------------------------------------------------------------------------------
 
 # Helper function to create custom configuration
-
-create_custom_config <- function(colors = NULL, plot = NULL, thresholds = NULL) {
-  cfg <- RESPIRATION_CONFIG # Start with defaults
+create_custom_config <- function(
+  colors = NULL, plot = NULL, thresholds = NULL
+) {
+  cfg <- resp_config
 
   # Override colors if provided
   if (!is.null(colors)) {
@@ -86,88 +87,13 @@ create_custom_config <- function(colors = NULL, plot = NULL, thresholds = NULL) 
   cfg
 }
 
-#------------------------------------------------------------------------------
-# CORE HELPER FUNCTIONS: get_column_info, validate_columns, plot_device, setup_analysis
-#------------------------------------------------------------------------------
 
-# 0.1 Get column indices and names
-get_column_info <- function(data) {
-  patterns <- list(
-    # Descriptive columns
-    chamber = "^chamber$|^parameter.*chamber",
-    www_g = "wet.*weight(?!.*tissue)|www",
-    resp_vol_ml = "resp.*vol",
-    chamber_notes = "chamber.*note|note",
-    tww_g = "wet.*tissue|tww",
-    ch_vol_ml = "chamber.*vol(?!.*resp)",
-
-    # Time columns
-    datetime = "date.*time",
-    time_sec = "time.*sec",
-
-    # Chamber measurement columns
-    mo2 = "CH.*MO2",
-    r2 = "CH.*R.*2",
-    slope = "CH.*slope",
-    temp = "AMB.*temp.*avg.*temp"
-  )
-
-  # Define which columns use only the first match (a single column per field,
-  # not one column per chamber). Includes descriptive columns (one value per
-  # individual) and time columns (shared across all individuals).
-  scalar_cols <- c(
-    "chamber", "www_g", "resp_vol_ml", "chamber_notes", "tww_g", "ch_vol_ml",
-    "datetime", "time_sec"
-  )
-
-  result <- list(idx = list(), names = list())
-
-  for (nm in names(patterns)) {
-    matches <- grep(patterns[[nm]], names(data), ignore.case = TRUE, perl = TRUE)
-
-    if (length(matches) > 0) {
-      # For scalar columns, take only the first match
-      if (nm %in% scalar_cols) {
-        result$idx[[nm]] <- matches[1]
-        result$names[[nm]] <- names(data)[matches[1]]
-      } else {
-        # For vector columns (mo2, r2, slope, temp), keep all matches
-        result$idx[[nm]] <- matches
-        result$names[[nm]] <- names(data)[matches]
-      }
-    } else {
-      result$idx[[nm]] <- NA
-      result$names[[nm]] <- NA_character_
-    }
-  }
-
-  result
-}
-
-# 0.2 Validate required columns exist
-validate_columns <- function(col_info, required) {
-  missing <- character()
-
-  for (col in required) {
-    idx <- col_info$idx[[col]]
-    if (is.na(idx[1])) {
-      missing <- c(missing, col)
-    }
-  }
-
-  if (length(missing) > 0) {
-    stop("Missing required columns: ", paste(missing, collapse = ", "))
-  }
-}
-
-# 0.3 Setup plot device helper - plots to screen and PDF
+# Plot device helper (plots to screen and PDF)
 plot_device <- function(output_file, width = 10, height = 8, expr) {
-  # Plot to screen first
+  # Plot to screen
   eval.parent(substitute(expr))
 
-  # Then save to PDF if output_file is provided
   if (!is.null(output_file)) {
-    # Create directory if it doesn't exist
     output_dir <- dirname(output_file)
     if (!dir.exists(output_dir)) {
       dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
@@ -181,14 +107,13 @@ plot_device <- function(output_file, width = 10, height = 8, expr) {
   invisible(NULL)
 }
 
-# 0.4 Setup function to validate inputs and create output directory
+
+# Function to validate inputs and create output directory
 setup_analysis <- function(file_path, export_path = NULL, verbose = TRUE) {
-  # Check file exists
   if (!file.exists(file_path)) {
     stop("File not found: ", file_path)
   }
 
-  # Create output directory
   if (!is.null(export_path)) {
     output_dir <- dirname(export_path)
     if (!dir.exists(output_dir)) {
@@ -200,40 +125,8 @@ setup_analysis <- function(file_path, export_path = NULL, verbose = TRUE) {
   invisible(TRUE)
 }
 
-#------------------------------------------------------------------------------
-# PART 1: DATA LOADING AND PREPROCESSING
-# extract_descriptive_data, prepare_time_series, build_chamber_list,
-# plot_raw_data, process_part1_data_loading
-#------------------------------------------------------------------------------
 
-source("Part1_Load_And_Prepare_Data.R")
-
-#------------------------------------------------------------------------------
-# PART 2A: CONTROL CHAMBER PROCESSING
-# analyze_control_chamber, plot_control_regression, process_control_chambers
-#------------------------------------------------------------------------------
-
-source("Part2A_Control_Chamber_Analysis.R")
-
-#------------------------------------------------------------------------------
-# PART 2B: BACKGROUND CORRECTION
-# correct_background, plot_background_correction, process_background_correction
-#------------------------------------------------------------------------------
-
-source("Part2B_Background_Correction.R")
-
-#------------------------------------------------------------------------------
-# PART 3: QUALITY CONTROL
-# apply_quality_filters, plot_rmr_by_temperature, plot_quality_diagnostics,
-# process_part3_quality_control
-#------------------------------------------------------------------------------
-
-source("Part3_Quality_Control_Filtering.R")
-
-#------------------------------------------------------------------------------
-# EXPORT HELPER
-#------------------------------------------------------------------------------
-
+# Function to export analysis results to Excel and CSV files
 export_results <- function(results, export_path, verbose = TRUE) {
   if (verbose) cat("\n=== EXPORTING ===\n")
 
@@ -269,9 +162,14 @@ export_results <- function(results, export_path, verbose = TRUE) {
   )
 
   # Control data
-  ctrl_combined <- bind_rows(lapply(results$control_analysis$individual_controls, function(x) {
-    select(x$data, experiment, chamber, id, time, slope, slope_filtered, slope_corrected, corrected_mo2_ch)
-  }))
+  ctrl_combined <- bind_rows(
+                             lapply(
+                                    results$control_analysis$individual_controls,
+                                    function(x) {
+                                      select(x$data, experiment, chamber, id,
+                                      time, slope, slope_filtered,
+                                      slope_corrected, corrected_mo2_ch)
+                                    }))
 
   # Excel workbook
   sheets <- list(
@@ -293,17 +191,27 @@ export_results <- function(results, export_path, verbose = TRUE) {
       by = c("experiment", "chamber", "species", "id")
     )
 
-  write_xlsx(sheets[!sapply(sheets, is.null)], paste0(export_path, "_workup.xlsx"))
+  write_xlsx(sheets[!sapply(sheets, is.null)],
+             paste0(export_path, "_workup.xlsx"))
   write_csv(results$final_data, paste0(export_path, "_final.csv"))
   write_csv(data_summary, paste0(export_path, "_data_summary.csv"))
 
   if (verbose) cat("  ✓ Files exported\n")
 }
 
-#------------------------------------------------------------------------------
-# MAIN WORKFLOW
-#------------------------------------------------------------------------------
 
+# Load required scripts for each part of the processing pipeline
+# PART 1: DATA LOADING AND PROCESSING
+source("Part1_Load_And_Prepare_Data.R")
+# PART 2A: CONTROL CHAMBER PROCESSING
+source("Part2A_Control_Chamber_Analysis.R")
+# PART 2B: BACKGROUND CORRECTION
+source("Part2B_Background_Correction.R")
+# PART 3: QUALITY CONTROL
+source("Part3_Quality_Control_Filtering.R")
+
+
+# MAIN WORKFLOW FUNCTION
 process_respiration_data <- function(
   file_path,
   experiment_start_time,
