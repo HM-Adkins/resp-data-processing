@@ -7,6 +7,15 @@ raw_script <- raw_script_candidates[file.exists(raw_script_candidates)][1]
 if (is.na(raw_script)) stop("Could not locate Raw_Resp_Data_Processing.R.")
 source(raw_script, local = TRUE)
 
+capture_raw_warnings <- function(expr) {
+  warnings <- character()
+  value <- withCallingHandlers(expr, warning = function(w) {
+    warnings <<- c(warnings, conditionMessage(w))
+    invokeRestart("muffleWarning")
+  })
+  list(value = value, warnings = warnings)
+}
+
 testthat::test_that("raw chamber selection keeps only requested channels", {
   data <- data.frame(
     DateTime = "7/26/2023 9:00:00 AM",
@@ -117,7 +126,12 @@ testthat::test_that("bins use complete groups of valid observations within each 
     `CH2 O2 mgO2` = c(21:27, NA, 29:34)
   )
   info <- get_raw_column_info(measure)
-  points <- prepare_regression_points(measure, info, 2)
+  captured <- capture_raw_warnings(prepare_regression_points(measure, info, 2))
+  points <- captured$value
+  testthat::expect_length(captured$warnings, 1)
+  testthat::expect_match(captured$warnings, "bin size 2")
+  testthat::expect_match(captured$warnings, "chamber 1 phase M1: 1 missing/non-finite")
+  testthat::expect_match(captured$warnings, "chamber 2 phase M1: 0 missing/non-finite O2 or time observation\\(s\\) excluded, 1 observation\\(s\\) discarded")
   m1_ch1 <- dplyr::filter(points, phase == "M1", chamber == 1)
   testthat::expect_equal(m1_ch1$o2, c(2, 6, 54.5))
   testthat::expect_equal(m1_ch1$time_sec, c(2, 4.5, 6.5))
@@ -142,7 +156,14 @@ testthat::test_that("regression comparisons preserve missing and insufficient pe
     raw_data = measure, time_series = list(measure = measure),
     col_info = get_raw_column_info(measure), metadata = list(chambers = c(1L, 2L))
   )
-  compared <- compare_raw_regressions(prepared, c(2, 4), verbose = FALSE)
+  captured <- capture_raw_warnings(
+    compare_raw_regressions(prepared, c(2, 4), verbose = FALSE)
+  )
+  compared <- captured$value
+  testthat::expect_length(captured$warnings, 3)
+  testthat::expect_match(captured$warnings[1], "unbinned.*chamber 1 phase M2: 7 missing/non-finite")
+  testthat::expect_match(captured$warnings[2], "bin size 2.*chamber 1 phase M1: 0 missing/non-finite O2 or time observation\\(s\\) excluded, 1 observation\\(s\\) discarded")
+  testthat::expect_match(captured$warnings[3], "bin size 4.*chamber 1 phase M1: 0 missing/non-finite O2 or time observation\\(s\\) excluded, 3 observation\\(s\\) discarded")
   testthat::expect_identical(names(compared$variants), c("unbinned", "bin_2", "bin_4"))
   testthat::expect_equal(nrow(compared$comparison), 12)
   subset <- dplyr::filter(compared$comparison, chamber == 1, phase == "M1")
@@ -157,11 +178,17 @@ testthat::test_that("regression comparisons preserve missing and insufficient pe
   testthat::expect_true(all(is.na(missing$r2)))
   testthat::expect_error(compare_raw_regressions(prepared, c(2, 2)), "unique")
   testthat::expect_error(compare_raw_regressions(prepared, numeric()), "bin_sizes")
-  empty_bins <- calculate_measure_stats(measure, get_raw_column_info(measure), 100)
+  empty_bins <- capture_raw_warnings(
+    calculate_measure_stats(measure, get_raw_column_info(measure), 100)
+  )$value
   testthat::expect_equal(empty_bins$n_points, rep(0L, 4))
   testthat::expect_true(all(is.na(empty_bins$slope_per_hr)))
-  single_bins <- calculate_measure_stats(measure, get_raw_column_info(measure), 1)
-  unbinned <- calculate_measure_stats(measure, get_raw_column_info(measure))
+  single_bins <- capture_raw_warnings(
+    calculate_measure_stats(measure, get_raw_column_info(measure), 1)
+  )$value
+  unbinned <- capture_raw_warnings(
+    calculate_measure_stats(measure, get_raw_column_info(measure))
+  )$value
   testthat::expect_equal(single_bins, unbinned)
 })
 
@@ -217,10 +244,12 @@ testthat::test_that("raw stages and legacy wrapper produce downstream-compatible
   testthat::expect_true(file.exists(paste0(prefix, "_measure.csv")))
   testthat::expect_true(file.exists(paste0(prefix, "_regression_comparison.csv")))
   testthat::expect_true(file.exists(paste0(prefix, "_bin_25_measure_stats.csv")))
-  testthat::expect_warning(
-    process_raw_part2(prepared, summary_path, 18, bin_size = 301, verbose = FALSE),
-    "No usable regressions for control chamber"
-  )
+  warnings <- capture_raw_warnings(
+    process_raw_part2(prepared, summary_path, 18, bin_size = 301, verbose = FALSE)
+  )$warnings
+  testthat::expect_length(warnings, 2)
+  testthat::expect_match(warnings[1], "bin size 301.*300 observation\\(s\\) discarded")
+  testthat::expect_match(warnings[2], "No usable regressions for control chamber")
 
   root <- dirname(normalizePath(raw_script))
   env <- new.env(parent = environment(process_raw_part2))
@@ -245,6 +274,22 @@ testthat::test_that("raw stages and legacy wrapper produce downstream-compatible
     post_qc <- env$process_part3_quality_control(result, corrected, verbose = FALSE)
     testthat::expect_equal(nrow(post_qc$raw_corrected), 2)
   }
+})
+
+testthat::test_that("warnings distinguish non-finite times and complete bins", {
+  measure <- tibble::tibble(
+    Phase = rep("M1", 6), time_sec = c(1, 2, 3, 4, Inf, 6),
+    time_hour = c(1, 2, 3, 4, 5, NA_real_),
+    `CH1 O2 mgO2` = c(1, 2, 3, 4, 5, Inf)
+  )
+  info <- get_raw_column_info(measure)
+  result <- capture_raw_warnings(prepare_regression_points(measure, info, 3))
+  testthat::expect_length(result$warnings, 1)
+  testthat::expect_match(result$warnings, "2 missing/non-finite O2 or time observation\\(s\\) excluded, 1 observation\\(s\\) discarded")
+  testthat::expect_equal(result$value$o2, 2)
+  clean <- measure[1:4, ]
+  testthat::expect_no_warning(prepare_regression_points(clean, info, 2))
+  testthat::expect_no_warning(prepare_regression_points(clean, info))
 })
 
 testthat::test_that("the raw entry point loads stage files outside the repository", {
