@@ -5,6 +5,23 @@
 # get_raw_column_info
 
 
+library(tidyverse)
+
+
+plot_raw_device <- function(output_file, width = 10, height = 8, expr) {
+  eval.parent(substitute(expr))
+
+  if (!is.null(output_file)) {
+    dir.create(dirname(output_file), recursive = TRUE, showWarnings = FALSE)
+    pdf(output_file, width = width, height = height)
+    eval.parent(substitute(expr))
+    dev.off()
+  }
+
+  invisible(NULL)
+}
+
+
 # Get named column indices from the data
 get_raw_column_info <- function(data) {
   patterns <- list(
@@ -244,3 +261,57 @@ plot_raw_instrument_data <- function(data, col_info, title_prefix = NULL, output
   if (!is.null(output_file)) message("Raw plot: ", output_file)
 }
 
+
+process_raw_part1 <- function(
+    file_path,
+    experiment_start_time,
+    experiment_end_time,
+    tz,
+    chamber_numbers = NULL,
+    export_path = NULL,
+    plot_title_prefix = NULL,
+    generate_raw_data_plot = FALSE,
+    verbose = TRUE) {
+  if (!file.exists(file_path)) stop("File not found: ", file_path)
+  raw_data <- read.csv(file_path, stringsAsFactors = FALSE)
+  selected <- select_raw_chambers(
+    raw_data, get_raw_column_info(raw_data), chamber_numbers
+  )
+  time_series <- prepare_raw_data(
+    selected$data, selected$col_info,
+    experiment_start_time, experiment_end_time, tz = tz
+  )
+
+  if (generate_raw_data_plot && !is.null(export_path)) {
+    plot_raw_instrument_data(
+      time_series$experimental, selected$col_info,
+      paste(c(plot_title_prefix, "All Phases"), collapse = " - "),
+      paste0(export_path, "_all_phases_plots.pdf")
+    )
+    plot_raw_instrument_data(
+      time_series$measure, selected$col_info,
+      paste(c(plot_title_prefix, "Measure Phases"), collapse = " - "),
+      paste0(export_path, "_measure_plots.pdf")
+    )
+  }
+  if (!is.null(export_path)) {
+    dir.create(dirname(export_path), recursive = TRUE, showWarnings = FALSE)
+    readr::write_csv(time_series$measure, paste0(export_path, "_measure.csv"))
+  }
+  if (verbose) {
+    message("Prepared ", nrow(time_series$measure), " measurement rows for ",
+            length(selected$chamber_numbers), " chambers.")
+  }
+  list(
+    raw_data = raw_data,
+    time_series = time_series,
+    col_info = selected$col_info,
+    metadata = list(
+      file_path = file_path,
+      experiment_start = experiment_start_time,
+      experiment_end = experiment_end_time,
+      tz = tz,
+      chambers = selected$chamber_numbers
+    )
+  )
+}
