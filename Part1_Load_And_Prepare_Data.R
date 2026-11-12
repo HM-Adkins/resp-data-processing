@@ -1,10 +1,69 @@
 #!/usr/bin/env Rscript
 
-#------------------------------------------------------------------------------
-# PART 1: DATA LOADING AND PREPROCESSING
-# extract_descriptive_data, prepare_time_series, match_chamber_columns,
-# build_chamber_list, plot_raw_data, process_part1_data_loading
-#------------------------------------------------------------------------------
+
+# PART 1: DATA LOADING AND PROCESSING
+# get_column_info, validate_columns, extract_descriptive_data,
+# prepare_time_series, match_chamber_columns, build_chamber_list,
+# plot_raw_data, process_part1_data_loading
+
+
+# Get named column indices from the data
+get_column_info <- function(data) {
+  patterns <- list(
+    chamber = "^chamber$|^parameter.*chamber",
+    www_g = "wet.*weight(?!.*tissue)|www",
+    resp_vol_ml = "resp.*vol",
+    chamber_notes = "chamber.*note|note",
+    tww_g = "wet.*tissue|tww",
+    ch_vol_ml = "chamber.*vol(?!.*resp)",
+    datetime = "date.*time",
+    time_sec = "time.*sec",
+    mo2 = "CH.*MO2",
+    r2 = "CH.*R.*2",
+    slope = "CH.*slope",
+    temp = "AMB.*temp.*avg.*temp"
+  )
+
+  scalar_cols <- c("chamber", "www_g", "resp_vol_ml", "chamber_notes", "tww_g",
+                   "ch_vol_ml", "datetime", "time_sec")
+  result <- list(idx = list(), names = list())
+
+  for (nm in names(patterns)) {
+    matches <- grep(patterns[[nm]], names(data), ignore.case = TRUE,
+                    perl = TRUE)
+    if (length(matches) > 0) {
+      if (nm %in% scalar_cols) {
+        result$idx[[nm]] <- matches[1]
+        result$names[[nm]] <- names(data)[matches[1]]
+      } else {
+        result$idx[[nm]] <- matches
+        result$names[[nm]] <- names(data)[matches]
+      }
+    } else {
+      result$idx[[nm]] <- NA
+      result$names[[nm]] <- NA_character_
+    }
+  }
+  result
+}
+
+
+# Validate required columns exist
+validate_columns <- function(col_info, required) {
+  missing <- character()
+
+  for (col in required) {
+    idx <- col_info$idx[[col]]
+    if (is.na(idx[1])) {
+      missing <- c(missing, col)
+    }
+  }
+
+  if (length(missing) > 0) {
+    stop("Missing required columns: ", paste(missing, collapse = ", "))
+  }
+}
+
 
 # 1.1 Extract descriptive metadata
 extract_descriptive_data <- function(
@@ -49,7 +108,7 @@ extract_descriptive_data <- function(
     rename(!!! rename_map)
 
   notes <- str_split_fixed(as.character(desc$chamber_notes),
-                             fixed(id_delimiter), n = 2)
+                           fixed(id_delimiter), n = 2)
   species <- str_trim(notes[, 1])
   id <- str_trim(notes[, 2])
   invalid_notes <- which(species == "" | id == "")
@@ -267,7 +326,7 @@ build_chamber_list <- function(resp_data, desc_data, col_info) {
 }
 
 
-# 1.5 Raw data plot
+# 1.5 Raw MO2 data plot
 plot_raw_data <- function(
     data,
     desc_data,
@@ -328,7 +387,7 @@ plot_raw_data <- function(
 }
 
 
-# RUN PART 1 FUNCTIONS AND PLOT RAW DATA: 1.5 Load and preprocess
+# 1.5 RUN PART 1 FUNCTIONS AND PLOT RAW DATA
 process_part1_data_loading <- function(
     file_path,
     experiment_start_time,
@@ -344,29 +403,23 @@ process_part1_data_loading <- function(
 
   if (verbose) cat("\n=== PART 1: DATA LOADING & PREPROCESSING ===\n\n")
 
-  # Load
   if (verbose) cat("[1. 1] Loading data...\n")
   raw_data <- read.csv(file_path, stringsAsFactors = FALSE)
   if (verbose) cat(
     "      ", nrow(raw_data), "rows x", ncol(raw_data), "columns\n\n"
   )
 
-  # Get column info
   col_info <- get_column_info(raw_data)
-
-  # Validate required columns are present (descriptive + measurement)
   validate_columns(col_info, c(
     "chamber", "www_g", "resp_vol_ml", "chamber_notes", "tww_g", "ch_vol_ml",
     "datetime", "time_sec", "mo2", "r2"
   ))
 
-  # Extract metadata
   if (verbose) cat("[1.2] Extracting metadata...\n")
   desc_data <- extract_descriptive_data(
     raw_data, col_info, experiment, id_delimiter, verbose
   )
 
-  # Prepare respiration data
   if (verbose) cat("[1.3] Processing time series...\n")
   resp_data <- raw_data %>%
     select(all_of(names(raw_data)[col_info$idx$datetime:ncol(raw_data)]))
@@ -378,14 +431,13 @@ process_part1_data_loading <- function(
   if (verbose) cat("      Acclimation:", nrow(time_series$acclimation),
                    "| Experimental:", nrow(time_series$experimental), "\n\n")
 
-  # Build chamber structures
   if (verbose) cat("[1.4] Building list of chamber datasets...\n")
   # Update col_info_resp to include the newly created time_hour column
   col_info_resp <- get_column_info(time_series$experimental)
-  chamber_list <- build_chamber_list(time_series$experimental, desc_data, col_info_resp)
+  chamber_list <- build_chamber_list(time_series$experimental, desc_data,
+                                     col_info_resp)
   if (verbose) cat("      ", length(chamber_list), "chambers ready\n\n")
 
-  # Plot raw data
   if (generate_raw_data_plot && !is.null(export_path)) {
     if (verbose) cat("[1.5] Plotting raw data...\n")
     col_info_all <- get_column_info(time_series$all)
