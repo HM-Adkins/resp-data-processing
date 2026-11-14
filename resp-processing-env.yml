@@ -11,3 +11,4 @@ dependencies:
   - r-testthat
   - r-lintr
   - r-styler
+  - r-box
