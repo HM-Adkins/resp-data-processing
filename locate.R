@@ -1,19 +1,14 @@
+#' Locate specific columns
 #'
-#' Locate recognized data columns
-#'
-#' Searches the input data's column names for the metadata, timing, oxygen
-#' concentration, respiration-rate, regression, and temperature fields
-#' recognized by the pipeline. Matching is case-insensitive. Fields with no
-#' matching columns are omitted; fields with multiple matches return every
-#' match in input-column order.
+#' Searches the input data's column names for the fields specified in the
+#' patterns list. Matching is not case-sensitive. Fields without matches
+#' are omitted. Fields with multiple matches return every match in input-column
+#' order.
 #'
 #' @param data A data frame whose column names will be searched.
 #' @returns A list with two named components. `idx` maps each located field to
 #'   its column position or positions in `data`; `names` maps each field to
 #'   the corresponding column name or names.
-#' @examples
-#' data <- data.frame(`CH1 O2 [mgO2/L]` = 1, check.names = FALSE)
-#' get_column_info(data)$names$o2
 #' @export
 get_column_info <- function(data) {
   patterns <- list(
@@ -47,12 +42,10 @@ get_column_info <- function(data) {
   result
 }
 
-#'
 #' Validate located columns
 #'
-#' Checks that a located-column result contains all fields required for the
-#' selected input type and that fields expected to identify one input column
-#' do not have multiple matches. Multiple columns are permitted for
+#' Checks for required fields and rejects multiple matches for fields that
+#' should identify a single column. Multiple columns are permitted for
 #' chamber-specific or trough-specific fields (`temp`, `o2`, `mo2`, `slope`,
 #' and `r2`).
 #'
@@ -63,100 +56,96 @@ get_column_info <- function(data) {
 #'
 #' @param col_info A list returned by [get_column_info()].
 #' @param data_type Input type: `"concentration"` for oxygen-concentration
-#'   observations or `"rate"` for precomputed respiration-rate data.
+#'   observations or `"rate"` for respiration-rate data.
 #' @returns Invisibly returns `NULL` when validation succeeds. Otherwise,
-#'   throws an error describing missing fields or ambiguous multiple matches.
+#'   gives an error.
 validate_columns <- function(col_info, data_type) {
-  required <- switch(
-    data_type,
-    concentration = c(
-      "chamber", "chamber_notes", "www_g", "tww_g",
-      "resp_vol_ml", "ch_vol_ml", "datetime", "phase", "o2"
-      ),
-    rate = c(
-      "chamber", "chamber_notes", "www_g", "tww_g",
-      "resp_vol_ml", "ch_vol_ml", "datetime", "time_sec",
-      "mo2", "slope", "r2"
+  common <- c(
+    "chamber", "chamber_notes", "www_g", "tww_g",
+    "resp_vol_ml", "ch_vol_ml", "datetime"
+  )
+
+  required <- c(
+    common,
+    switch(
+      data_type,
+      concentration = c("phase", "o2"),
+      rate = c("time_sec", "mo2", "slope", "r2")
     )
   )
 
-  multi_column_fields <- c("temp", "o2", "mo2", "slope", "r2")
-  flagged_fields <- names(col_info$idx)[
-    lengths(col_info$idx) > 1L &
-      !names(col_info$idx) %in% multi_column_fields
-  ]
+  missing <- setdiff(required, names(col_info$idx))
+  if (length(missing) > 0) {
+    stop("Missing required columns: ", paste(missing, collapse = ", "),
+         call. = FALSE)
+  }
 
-  if (length(flagged_fields) > 0L) {
-    details <- vapply(flagged_fields, function(field) {
+  multiple_allowed <- c("temp", "o2", "mo2", "slope", "r2")
+  multiple <- names(col_info$idx)[lengths(col_info$idx) > 1]
+  ambiguous <- setdiff(multiple, multiple_allowed)
+
+  if (length(ambiguous) > 0) {
+    details <- vapply(ambiguous, function(field) {
       paste0(field, ": ", paste(col_info$names[[field]], collapse = ", "))
     }, character(1))
 
-    stop(
-      "Expected one column per field. Multiple matches found: ",
-      paste(details, collapse = "; "),
-      call. = FALSE
-    )
-  }
-
-  missing <- required[
-    vapply(required, function(field) {
-      idx <- col_info$idx[[field]]
-      is.null(idx) || length(idx) == 0L || all(is.na(idx))
-    }, logical(1))
-  ]
-
-  if (length(missing) > 0L) {
-    stop("Missing required columns: ", paste(missing, collapse = ", "),
+    stop("Multiple matches found: ", paste(details, collapse = "; "),
          call. = FALSE)
   }
 
   invisible(NULL)
 }
 
+#' Order columns by chamber
 #'
+#' Extracts chamber numbers from column names and returns the names in the
+#' requested chamber order.
+#'
+#' @param column_names Column names containing chamber identifiers.
+#' @param field Measurement field name, used in error messages.
+#' @param chamber_numbers Chamber numbers in the desired order.
+#' @returns A character vector of column names ordered by chamber.
+order_columns_by_chamber <- function(column_names, field, chamber_numbers) {
+  numbers <- stringr::str_match(
+    column_names,
+    stringr::regex("ch[.\\s]*(\\d+)", ignore_case = TRUE)
+  )[, 2]
+
+  numbers <- suppressWarnings(as.integer(numbers))
+  if (anyNA(numbers) || anyDuplicated(numbers)) {
+    stop("Invalid or duplicate chamber numbers in ", field, " columns.",
+         call. = FALSE)
+  }
+
+  positions <- match(chamber_numbers, numbers)
+  if (anyNA(positions)) {
+    stop(
+      "Missing ", field, " columns for chambers: ",
+      paste(chamber_numbers[is.na(positions)], collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  column_names[positions]
+}
+
 #' Locate and match input columns to chambers
 #'
-#' Identifies columns, validates the fields required for the selected input
-#' type, and matches chamber-specific measurements to the requested chamber
-#' numbers. Matched column names are returned in `chamber_numbers` order,
-#' regardless of their order in the input data.
+#' Locates and validates input columns, then matches measurement columns to
+#' chambers. Ambient temperature columns remain in `col_info` and are not
+#' matched to chambers.
 #'
-#' Concentration input returns matched `o2` columns. Rate input returns matched
-#' `mo2`, `slope`, and `r2` columns. Every requested chamber must have a
-#' corresponding column for each matched field. Ambient temperature columns
-#' are included in `col_info` but are not chamber-matched here.
-#'
-#' @param data A data frame containing concentration or rate input.
-#' @param data_type Either `"concentration"` (the default) or `"rate"`.
-#' @param chamber_numbers Positive, unique whole-number chamber identifiers in
-#'   the desired output order. Defaults to `c(1, 2, 3, 4, 5, 6, 7, 8)`.
-#' @returns A list containing `col_info` (from [get_column_info()]),
-#'   `chamber_numbers` (the requested chamber order as integers), and
-#'   `columns` (a named list of matched column-name vectors).
-#' @details The function errors if required fields are missing, a field
-#'   expected to match one column matches multiple columns, chamber numbers
-#'   are invalid or duplicated, or a requested chamber has no matching
-#'   measurement column.
-#' @examples
-#' data <- data.frame(
-#'   `Parameter/Chamber` = c("Chamber 1", "Chamber 2"),
-#'   `Chamber notes` = c("Fish-A", "Fish-B"),
-#'   `Wet weight [g]` = c(100, 120),
-#'   `Wet tissue weight [g]` = c(80, 90),
-#'   `Resp. volume [mL]` = c(250, 250),
-#'   `Chamber vol [ml]` = c(500, 500),
-#'   `Date & Time` = c("2023-01-01", "2023-01-01"),
-#'   `Phase` = c("M1", "M1"),
-#'   `CH2 O2 [mgO2/L]` = c(1, 2),
-#'   `CH1 O2 [mgO2/L]` = c(2, 1),
-#'   check.names = FALSE
-#' )
-#' match_chamber_columns(data, "concentration", c(1, 2))$columns$o2
+#' @param data A concentration or rate data frame.
+#' @param data_type Either `"concentration"` or `"rate"`.
+#' @param chamber_numbers Unique positive whole-number chamber identifiers
+#'   in the desired output order. Defaults to `1:8`.
+#' @returns A list containing `col_info`, `chamber_numbers`, and `columns`.
+#'   The `columns` list contains `o2` for concentration data or `mo2`,
+#'   `slope`, and `r2` for rate data.
 #' @export
-match_chamber_columns <- function(
-    data,
-    data_type = c("concentration", "rate"),
-    chamber_numbers = 1:8) {
+match_chamber_columns <- function(data,
+                                  data_type = c("concentration", "rate"),
+                                  chamber_numbers = 1:8) {
   data_type <- match.arg(data_type)
 
   if (!is.numeric(chamber_numbers) || !length(chamber_numbers) ||
@@ -178,28 +167,7 @@ match_chamber_columns <- function(
   )
 
   columns <- lapply(fields, function(field) {
-    column_names <- col_info$names[[field]]
-    numbers <- stringr::str_match(
-      column_names,
-      stringr::regex("ch[.\\s]*(\\d+)", ignore_case = TRUE)
-    )[, 2]
-
-    numbers <- suppressWarnings(as.integer(numbers))
-    if (anyNA(numbers) || anyDuplicated(numbers)) {
-      stop("Invalid or duplicate chamber numbers in ", field, " columns.",
-           call. = FALSE)
-    }
-
-    positions <- match(chamber_numbers, numbers)
-    if (anyNA(positions)) {
-      stop(
-        "Missing ", field, " columns for chambers: ",
-        paste(chamber_numbers[is.na(positions)], collapse = ", "),
-        call. = FALSE
-      )
-    }
-
-    column_names[positions]
+    order_columns_by_chamber(col_info$names[[field]], field, chamber_numbers)
   })
   names(columns) <- fields
 
