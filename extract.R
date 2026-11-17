@@ -1,68 +1,67 @@
-#' Extract chamber metadata
+#' Extract descriptive and time-series data
 #'
-#' Extracts and standardizes metadata for the selected chambers. Chamber notes
-#' must contain species and ID separated by `id_delimiter`. Missing weights
-#' and volumes are retained as NA, including for control chambers.
+#' Separates descriptive columns from the remaining input columns.
 #'
 #' @param data Original input data frame.
-#' @param located Result of `locate$match_chamber_columns()` on `data`.
-#' @param experiment A single non-negative integer experiment identifier.
-#' @param id_delimiter Separator between species and ID in chamber notes.
-#' @returns A data frame ordered by selected chamber with experiment, chamber,
-#'   species, ID, weights in grams and kilograms, and volumes in millilitres.
+#' @param located Result of `locate$match_chamber_columns()`.
+#' @returns A list with `descriptive` and `time_series` data frames. The
+#'   descriptive columns are removed from `time_series`.
 #' @export
-extract_descriptive_data <- function(data, located, experiment,
-                                     id_delimiter = "-") {
-  if (length(experiment) != 1L || !is.numeric(experiment) ||
-      is.na(experiment) || !is.finite(experiment) || experiment < 0 ||
-      experiment != floor(experiment) || experiment > .Machine$integer.max) {
-    stop("experiment must be a non-negative whole number.", call. = FALSE)
-  }
-
-  if (!is.character(id_delimiter) || length(id_delimiter) != 1L ||
-      is.na(id_delimiter) || !nzchar(id_delimiter)) {
-    stop("id_delimiter must be a non-empty string.", call. = FALSE)
-  }
-
+extract_descriptive_data <- function(data, located) {
   fields <- c(
     "chamber", "chamber_notes", "www_g", "tww_g",
     "resp_vol_ml", "ch_vol_ml"
   )
-  column_names <- unlist(located$col_info$names[fields], use.names = FALSE)
-  desc <- data[, column_names, drop = FALSE]
-  names(desc) <- fields
+  columns <- unlist(located$col_info$names[fields], use.names = FALSE)
 
-  notes <- as.character(desc$chamber_notes)
-  desc <- desc[!is.na(notes) & nzchar(trimws(notes)), , drop = FALSE]
+  list(
+    descriptive = data[, columns, drop = FALSE],
+    time_series = data[, !names(data) %in% columns, drop = FALSE]
+  )
+}
 
-  if (nrow(desc) == 0L) {
+
+#' Format descriptive chamber data
+#'
+#' Parses chamber numbers, species and IDs; converts measurements to numeric;
+#' calculates weights in kilograms; and orders rows by chamber.
+#'
+#' @param data Descriptive data frame from [extract_descriptive_data()].
+#' @param located Result of `locate$match_chamber_columns()`.
+#' @param experiment Experiment identifier.
+#' @param id_delimiter Separator between species and ID in chamber notes.
+#' @returns A formatted data frame with one row per selected chamber.
+#' @export
+format_descriptive_data <- function(data, located, experiment,
+                                    id_delimiter = "-") {
+  fields <- c(
+    "chamber", "chamber_notes", "www_g", "tww_g",
+    "resp_vol_ml", "ch_vol_ml"
+  )
+  names(data) <- fields
+
+  notes <- as.character(data$chamber_notes)
+  data <- data[!is.na(notes) & nzchar(trimws(notes)), , drop = FALSE]
+  if (nrow(data) == 0L) {
     stop("No chamber metadata rows found.", call. = FALSE)
   }
 
-  chamber <- as.character(desc$chamber)
-  digits <- regmatches(chamber, regexpr("[0-9]+", chamber))
-
-  if (length(digits) != nrow(desc)) {
-    stop("Some metadata rows have invalid chamber numbers.", call. = FALSE)
-  }
-
-  chamber <- suppressWarnings(as.integer(digits))
-  if (anyNA(chamber) || any(chamber < 1L) || anyDuplicated(chamber)) {
+  chamber_text <- as.character(data$chamber)
+  chamber <- suppressWarnings(as.integer(
+    regmatches(chamber_text, regexpr("[0-9]+", chamber_text))
+  ))
+  if (anyNA(chamber) || anyDuplicated(chamber)) {
     stop("Metadata must identify each chamber exactly once.", call. = FALSE)
   }
 
-  notes <- strsplit(as.character(desc$chamber_notes), id_delimiter, fixed = TRUE)
+  notes <- strsplit(as.character(data$chamber_notes), id_delimiter, fixed = TRUE)
   valid_notes <- vapply(notes, function(x) {
-    length(x) >= 2L && nzchar(trimws(x[1])) &&
+    length(x) >= 2L &&
+      nzchar(trimws(x[1])) &&
       nzchar(trimws(paste(x[-1], collapse = id_delimiter)))
   }, logical(1))
-
   if (any(!valid_notes)) {
-    stop(
-      "Could not parse species and ID from chamber notes in metadata row(s): ",
-      paste(which(!valid_notes), collapse = ", "),
-      call. = FALSE
-    )
+    stop("Chamber notes must contain species and ID.", call. = FALSE)
   }
 
   species <- vapply(notes, function(x) trimws(x[1]), character(1))
@@ -70,34 +69,29 @@ extract_descriptive_data <- function(data, located, experiment,
     trimws(paste(x[-1], collapse = id_delimiter))
   }, character(1))
 
-  for (field in c("www_g", "tww_g", "resp_vol_ml", "ch_vol_ml")) {
-    values <- as.character(desc[[field]])
+  numeric_fields <- c("www_g", "tww_g", "resp_vol_ml", "ch_vol_ml")
+  for (field in numeric_fields) {
+    values <- as.character(data[[field]])
     values[!is.na(values) & !nzchar(trimws(values))] <- NA_character_
     converted <- suppressWarnings(as.numeric(values))
-    invalid <- !is.na(values) & !is.finite(converted)
 
-    if (any(invalid)) {
-      stop(
-        "Invalid ", field, " in metadata row(s): ",
-        paste(which(invalid), collapse = ", "),
-        call. = FALSE
-      )
+    if (any(!is.na(values) & !is.finite(converted))) {
+      stop("Invalid values in ", field, ".", call. = FALSE)
     }
-
-    desc[[field]] <- converted
+    data[[field]] <- converted
   }
 
   result <- data.frame(
-    experiment = as.integer(experiment),
+    experiment = experiment,
     chamber = chamber,
     species = species,
     id = id,
-    www_g = desc$www_g,
-    tww_g = desc$tww_g,
-    resp_vol_ml = desc$resp_vol_ml,
-    ch_vol_ml = desc$ch_vol_ml,
-    www_kg = desc$www_g / 1000,
-    tww_kg = desc$tww_g / 1000
+    www_g = data$www_g,
+    tww_g = data$tww_g,
+    resp_vol_ml = data$resp_vol_ml,
+    ch_vol_ml = data$ch_vol_ml,
+    www_kg = data$www_g / 1000,
+    tww_kg = data$tww_g / 1000
   )
 
   positions <- match(located$chamber_numbers, result$chamber)
@@ -115,30 +109,22 @@ extract_descriptive_data <- function(data, located, experiment,
 
 #' Format the input time series
 #'
-#' Parses the located date-time column in the specified time zone. The
-#' original column is replaced with POSIXct values; all other columns remain.
+#' Parses the located date-time column in the specified time zone.
 #'
-#' @param data Original input data frame.
-#' @param located Result of `locate$match_chamber_columns()` on `data`.
+#' @param data Time-series data frame, such as `time_series` from
+#'   [extract_descriptive_data()].
+#' @param located Result of `locate$match_chamber_columns()`.
 #' @param tz An Olson time-zone name, such as `"UTC"`.
 #' @param date_format Format of the input date-time strings, passed to
-#'   `as.POSIXct()`. For example, `"%d-%m-%Y/%H:%M:%S"`.
-#' @returns The input data frame with its date-time column parsed.
+#'   `as.POSIXct()`.
+#' @returns The input data frame with its date-time column parsed as POSIXct.
 #' @export
 format_time_series <- function(data, located, tz, date_format) {
-  if (!is.character(tz) || length(tz) != 1L || is.na(tz) ||
-      !tz %in% OlsonNames()) {
-    stop("tz must be a valid time-zone name.", call. = FALSE)
-  }
-
-  if (!is.character(date_format) || length(date_format) != 1L ||
-      is.na(date_format) || !nzchar(date_format)) {
-    stop("date_format must be a non-empty format string.", call. = FALSE)
-  }
-
   column <- located$col_info$names$datetime
   parsed <- suppressWarnings(as.POSIXct(
-    as.character(data[[column]]), format = date_format, tz = tz
+    as.character(data[[column]]),
+    format = date_format,
+    tz = tz
   ))
 
   if (anyNA(parsed)) {
@@ -157,44 +143,27 @@ format_time_series <- function(data, located, tz, date_format) {
 #' Extract the experimental time window
 #'
 #' Selects observations from start through end, inclusive. For concentration
-#' data, rows before the first F1 phase are excluded. F/W/M loops whose M phase
-#' contains fewer than 300 observations within the window are excluded, as are
-#' F/W phases after the last complete M phase. Rate data retain every row in
-#' the time window. Concentration elapsed time starts at the first retained F1
-#' timestamp; rate elapsed time starts at the first in-window observation.
+#' data, excludes rows before the first F1 and F/W/M loops with fewer than
+#' 300 M-phase observations in the window. F/W phases after the last complete
+#' M phase are also excluded. Rate data retain all rows in the window.
 #'
 #' @param data Data returned by [format_time_series()].
-#' @param located Result of `locate$match_chamber_columns()` on the input.
+#' @param located Result of `locate$match_chamber_columns()`.
 #' @param data_type Either `"concentration"` or `"rate"`.
-#' @param start_time,end_time Experiment boundaries as
-#'   `"YYYY-MM-DD HH:MM:SS"` strings interpreted in `tz`.
-#' @param tz The Olson time zone used by [format_time_series()].
-#' @returns The selected rows with `time_sec` and `time_hour` elapsed-time
-#'   columns.
+#' @param start_time,end_time Boundaries as `"YYYY-MM-DD HH:MM:SS"` strings.
+#' @param tz Olson time-zone name used to interpret the boundaries.
+#' @returns Selected rows with `time_sec` and `time_hour` elapsed-time columns.
 #' @export
 extract_experimental_data <- function(data, located, data_type, start_time,
                                       end_time, tz) {
   data_type <- match.arg(data_type, c("concentration", "rate"))
-  if (!is.character(tz) || length(tz) != 1L || is.na(tz) ||
-      !tz %in% OlsonNames()) {
-    stop("tz must be a valid time-zone name.", call. = FALSE)
-  }
 
-  parse_boundary <- function(value) {
-    if (!is.character(value) || length(value) != 1L || is.na(value)) {
-      stop("Experiment boundaries must be date-time strings.", call. = FALSE)
-    }
-    suppressWarnings(as.POSIXct(
-      value, format = "%Y-%m-%d %H:%M:%S", tz = tz
-    ))
-  }
-  start <- parse_boundary(start_time)
-  end <- parse_boundary(end_time)
-  if (is.na(start) || is.na(end) || start >= end) {
-    stop(
-      "Experiment boundaries must be valid and start before end.",
-      call. = FALSE
-    )
+  start <- as.POSIXct(start_time, format = "%Y-%m-%d %H:%M:%S", tz = tz)
+  end <- as.POSIXct(end_time, format = "%Y-%m-%d %H:%M:%S", tz = tz)
+  if (length(start) != 1L || length(end) != 1L ||
+      is.na(start) || is.na(end) || start >= end) {
+    stop("Experiment boundaries must be valid and start before end.",
+         call. = FALSE)
   }
 
   datetime <- data[[located$col_info$names$datetime]]
@@ -202,6 +171,7 @@ extract_experimental_data <- function(data, located, data_type, start_time,
     stop("Format date-time values before selecting the experiment.",
          call. = FALSE)
   }
+
   experimental <- data[datetime >= start & datetime <= end, , drop = FALSE]
   if (nrow(experimental) == 0L) {
     stop("No observations found in the experiment window.", call. = FALSE)
@@ -215,23 +185,23 @@ extract_experimental_data <- function(data, located, data_type, start_time,
       stop("No F1 phase found in the experiment window.", call. = FALSE)
     }
 
-    # Discard all rows before the first F1.
-    experimental <- experimental[seq.int(f1_rows[1], nrow(experimental)), ,
-                                  drop = FALSE]
+    origin <- experimental[[located$col_info$names$datetime]][f1_rows[1]]
+    experimental <- experimental[
+      seq.int(f1_rows[1], nrow(experimental)), , drop = FALSE
+    ]
     phases <- toupper(trimws(as.character(experimental[[phase_col]])))
 
-    # Remove loops whose M phase has fewer than 300 observations.
-    fwm_rows <- grepl("^[FWM][0-9]+$", phases)
+    loop_rows <- grepl("^[FWM][0-9]+$", phases)
     phase_numbers <- suppressWarnings(
       as.integer(sub("^[FWM]", "", phases))
     )
-    loops <- unique(phase_numbers[fwm_rows])
+    loops <- unique(phase_numbers[loop_rows])
     m_counts <- vapply(loops, function(loop_number) {
       sum(phases == paste0("M", loop_number), na.rm = TRUE)
     }, integer(1))
 
     incomplete_loops <- loops[m_counts < 300L]
-    keep <- !(fwm_rows & phase_numbers %in% incomplete_loops)
+    keep <- !(loop_rows & phase_numbers %in% incomplete_loops)
     experimental <- experimental[keep, , drop = FALSE]
 
     phases <- toupper(trimws(as.character(experimental[[phase_col]])))
@@ -241,7 +211,6 @@ extract_experimental_data <- function(data, located, data_type, start_time,
            call. = FALSE)
     }
 
-    # Exclude F/W phases after the last complete M phase.
     last_complete_m <- max(as.integer(sub("^M", "", phases[m_rows])))
     fw_rows <- grepl("^[FW][0-9]+$", phases)
     fw_numbers <- suppressWarnings(
@@ -251,15 +220,12 @@ extract_experimental_data <- function(data, located, data_type, start_time,
     keep[fw_rows] <- fw_numbers <= last_complete_m
     experimental <- experimental[keep, , drop = FALSE]
 
-    phases <- toupper(trimws(as.character(experimental[[phase_col]])))
-    f1_rows <- which(!is.na(phases) & phases == "F1")
     dates <- experimental[[located$col_info$names$datetime]]
-    seconds <- as.numeric(difftime(
-      dates, min(dates[f1_rows]), units = "secs"
-    ))
+    seconds <- as.numeric(difftime(dates, origin, units = "secs"))
   } else {
-    values <- experimental[[located$col_info$names$time_sec]]
-    seconds <- suppressWarnings(as.numeric(as.character(values)))
+    seconds <- suppressWarnings(as.numeric(as.character(
+      experimental[[located$col_info$names$time_sec]]
+    )))
     if (any(!is.finite(seconds))) {
       stop("Rate input contains invalid time-in-seconds values.",
            call. = FALSE)
@@ -275,22 +241,22 @@ extract_experimental_data <- function(data, located, data_type, start_time,
 
 #' Build a chamber list
 #'
-#' Combines each selected chamber's metadata and matched measurements with the
-#' shared experimental timing and mean ambient temperature. Concentration
-#' chambers contain `o2` and `phase`; rate chambers contain `r2`, `slope`,
-#' `raw_mo2_kg_www`, and `raw_mo2_ch`. Control chamber MO2 is retained as a
-#' per-chamber value rather than multiplied by body weight.
+#' Combines each chamber's metadata and matched measurements with experimental
+#' timing and mean ambient temperature. Control MO2 is retained per chamber.
 #'
 #' @param data Data returned by [extract_experimental_data()].
-#' @param descriptive_data Data returned by [extract_descriptive_data()].
+#' @param descriptive_data Data returned by [format_descriptive_data()].
 #' @param located Result of `locate$match_chamber_columns()`.
 #' @param data_type Either `"concentration"` or `"rate"`.
-#' @returns A named list in selected chamber order. Each entry is a data frame
-#'   of metadata, elapsed time, average temperature, and measurements.
+#' @returns A named list of chamber data frames.
 #' @export
 build_chamber_list <- function(data, descriptive_data, located, data_type) {
   data_type <- match.arg(data_type, c("concentration", "rate"))
-  fields <- if (data_type == "concentration") "o2" else c("mo2", "slope", "r2")
+  fields <- if (data_type == "concentration") {
+    "o2"
+  } else {
+    c("mo2", "slope", "r2")
+  }
 
   if (!all(fields %in% names(located$columns))) {
     stop("Located columns do not match data_type.", call. = FALSE)
@@ -303,18 +269,12 @@ build_chamber_list <- function(data, descriptive_data, located, data_type) {
   }
 
   temps <- located$col_info$names$temp
-
-  if (length(temps) == 0L) {
+  if (is.null(temps) || length(temps) == 0L) {
     avg_temp <- rep(NA_real_, nrow(data))
   } else {
     if (!all(vapply(data[temps], is.numeric, logical(1)))) {
       stop("Ambient temperature columns must be numeric.", call. = FALSE)
     }
-
-    if (any(vapply(data[temps], function(x) any(is.infinite(x)), logical(1)))) {
-      stop("Ambient temperature contains infinite values.", call. = FALSE)
-    }
-
     avg_temp <- rowMeans(data[, temps, drop = FALSE], na.rm = TRUE)
     avg_temp[is.nan(avg_temp)] <- NA_real_
   }
