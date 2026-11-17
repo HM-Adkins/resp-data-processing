@@ -7,7 +7,6 @@ box::use(
 )
 
 data_type <- "concentration"
-data <- read.csv("data/T.macrodon_FMR_18C_raw.csv", stringsAsFactors = FALSE)
 
 located <- match_chamber_columns(
   data,
