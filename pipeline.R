@@ -8,10 +8,12 @@ box::use(
 
 data_type <- "concentration"
 
-located <- match_chamber_columns(
-  data,
-  data_type = data_type,
-  chamber_numbers = c(1:8)
+col_info <- locate_columns(data, data_type = "concentration")
+
+located <- select_chamber_columns(
+  col_info,
+  data_type = "concentration",
+  chamber_numbers = 1:8
 )
 
 extracted <- extract_descriptive_data(data, located)

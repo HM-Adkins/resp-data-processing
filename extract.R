@@ -20,7 +20,6 @@ extract_descriptive_data <- function(data, located) {
   )
 }
 
-
 #' Format descriptive chamber data
 #'
 #' Parses chamber numbers, species and IDs; converts measurements to numeric;
@@ -160,20 +159,14 @@ extract_experimental_data <- function(data, located, data_type, start_time,
 
   start <- as.POSIXct(start_time, format = "%Y-%m-%d %H:%M:%S", tz = tz)
   end <- as.POSIXct(end_time, format = "%Y-%m-%d %H:%M:%S", tz = tz)
-  if (length(start) != 1L || length(end) != 1L ||
-      is.na(start) || is.na(end) || start >= end) {
-    stop("Experiment boundaries must be valid and start before end.",
+  if (start >= end) {
+    stop("Experiment start time must be before end time.",
          call. = FALSE)
   }
 
   datetime <- data[[located$col_info$names$datetime]]
-  if (!inherits(datetime, "POSIXct") || anyNA(datetime)) {
-    stop("Format date-time values before selecting the experiment.",
-         call. = FALSE)
-  }
-
   experimental <- data[datetime >= start & datetime <= end, , drop = FALSE]
-  if (nrow(experimental) == 0L) {
+  if (nrow(experimental) == 0) {
     stop("No observations found in the experiment window.", call. = FALSE)
   }
 
@@ -181,7 +174,7 @@ extract_experimental_data <- function(data, located, data_type, start_time,
     phase_col <- located$col_info$names$phase
     phases <- toupper(trimws(as.character(experimental[[phase_col]])))
     f1_rows <- which(!is.na(phases) & phases == "F1")
-    if (length(f1_rows) == 0L) {
+    if (length(f1_rows) == 0) {
       stop("No F1 phase found in the experiment window.", call. = FALSE)
     }
 
@@ -237,7 +230,6 @@ extract_experimental_data <- function(data, located, data_type, start_time,
   experimental$time_hour <- seconds / 3600
   experimental
 }
-
 
 #' Build a chamber list
 #'
